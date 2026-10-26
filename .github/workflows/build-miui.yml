@@ -1,0 +1,99 @@
+name: Build MIUI Kernel for umi (4.19.325 + SukiSU)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            bc bison build-essential ccache curl flex gawk git gnupg gperf \
+            imagemagick libncurses-dev lib32readline-dev lib32z1-dev \
+            liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils \
+            lzop pngcrush rsync schedtool squashfs-tools xsltproc zip \
+            zlib1g-dev python3
+          echo "--- 版本 ---"
+          make --version | head -1
+          nproc
+
+      - name: 缓存 ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache_mikernel
+          key: ${{ runner.os }}-ccache-umi-miui-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-umi-miui-
+            ${{ runner.os }}-ccache-umi-
+
+      - name: 下载 zyc-clang 16 工具链
+        run: |
+          mkdir -p $HOME/zyc-clang
+          cd $HOME/zyc-clang
+          wget -q https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz
+          tar -zxf Clang-16.0.6-20260807.tar.gz
+          ls -la $HOME/zyc-clang/bin/ | head -10
+          $HOME/zyc-clang/bin/clang --version
+
+      - name: 编译 MIUI 内核（umi + KSU + MIUI）
+        run: |
+          set -e
+          chmod +x build_kernel.sh
+          echo "==> ./build_kernel.sh umi ksu miui"
+          ./build_kernel.sh umi ksu miui
+
+      - name: 列出产物
+        if: always()
+        run: |
+          echo "==> 当前目录 zip 文件:"
+          ls -lh *.zip 2>/dev/null || echo "(无 zip)"
+          echo ""
+          echo "==> 编译输出目录:"
+          ls -la out_*/arch/arm64/boot/ 2>/dev/null || echo "(无 out 目录)"
+
+      - name: 上传 AnyKernel3 zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: umi-miui-kernel-anykernel3
+          path: APTKernel_*.zip
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 7
+
+      - name: 上传裸内核 Image（备用）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: umi-miui-kernel-image
+          path: |
+            out_miui/arch/arm64/boot/Image
+            out_miui/arch/arm64/boot/dtb
+            out_miui/arch/arm64/boot/dtbo.img
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 汇总
+        if: always()
+        run: |
+          echo "## MIUI 内核编译结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "目标: umi + KernelSU(ReSukiSU) + MIUI" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if ls APTKernel_*.zip 1>/dev/null 2>&1; then
+            echo "✅ **AnyKernel3 zip 已生成**" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            ls -lh APTKernel_*.zip >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **未生成 zip**，检查编译日志" >> $GITHUB_STEP_SUMMARY
+          fi
