@@ -80,16 +80,24 @@ if [ "$ENABLE_KSU" -eq 1 ]; then
     # 而且 selinux_hide 也没能真正注册进内核。这里直接锁 SukiSU-Ultra 最新 main。
     rm -rf KernelSU
     git clone --depth 1 https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
-    (
-        cd KernelSU
-        KSU_COMMIT=$(git rev-parse --short HEAD)
-        KSU_TAG=$(git describe --abbrev=0 --tags 2>/dev/null || echo unknown)
-        KSU_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo 0)
-        echo "[+] KernelSU commit=${KSU_COMMIT} tag=${KSU_TAG} count=${KSU_COUNT}"
-        echo "[+] features:"
-        ls kernel/feature/*.c 2>/dev/null | sed 's#kernel/feature/#    #'
-    )
-    ln -sfn "$(pwd)/KernelSU/kernel" "drivers/kernelsu"
+    echo "[+] cloned head: $(git -C KernelSU rev-parse --short HEAD)"
+    echo "[+] KernelSU/kernel/feature:"
+    ls -1 KernelSU/kernel/feature/*.c 2>/dev/null | sed 's#.*/feature/#    #'
+    echo "[+] KernelSU/kernel/Kbuild 前 6 行:"
+    head -6 KernelSU/kernel/Kbuild 2>/dev/null | sed 's/^/    /'
+
+    # 关键：drivers/kernelsu 若是已存在的实体目录，ln -sfn 只会在里面再建一个软链，
+    # 结果 make 继续用旧目录里的老 Kbuild（只有 ksu.o），feature/*.o 全被忽略。
+    # 必须先硬删，再建软链，然后回读 Kbuild 确认是多对象结构。
+    rm -rf drivers/kernelsu
+    ln -s "$(pwd)/KernelSU/kernel" drivers/kernelsu
+    echo "[+] drivers/kernelsu -> $(readlink drivers/kernelsu)"
+    KSU_OBJ_COUNT=$(grep -c 'kernelsu-objs +=' drivers/kernelsu/Kbuild 2>/dev/null || echo 0)
+    echo "[+] kernelsu-objs 条目数: ${KSU_OBJ_COUNT}"
+    if [ "${KSU_OBJ_COUNT}" -lt 5 ]; then
+        echo "[!] 警告：Kbuild 对象数异常（应为 20+），软链可能指向旧代码"
+        head -20 drivers/kernelsu/Kbuild | sed 's/^/    /'
+    fi
     grep -q "kernelsu" drivers/Makefile || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
     grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig || sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
     echo "[+] KernelSU setup finished."
