@@ -105,6 +105,29 @@
 
 struct selinux_state selinux_state;
 
+/*
+ * [SUSFS] selinux_hide integration marker.
+ *
+ * The real work (faking /sys/fs/selinux/{status,context,access} and filtering
+ * setprocattr writes) happens at runtime in BakaSU's inline hooks, see
+ * drivers/kernelsu/feature/selinux_hide.c: it ksu_patch_text()es
+ * sel_handle_status_ops.open, context_write, access_write and
+ * selinux_setprocattr once the manager turns the feature on.
+ *
+ * This declaration exists for two reasons:
+ *   1) drivers/kernelsu/tools/susfs_compat.mk greps this file for the literal
+ *      identifier below to decide whether to pass
+ *      -DKSU_COMPAT_HAS_SUSFS_FEATURE_SELINUX_HIDE. Without it the entire
+ *      selinux_hide.c body is compiled out and ksud reports the feature as
+ *      [NOT_SUPPORTED].
+ *   2) the definition in selinux_hide.c stays the single global symbol.
+ *
+ * Do not rename the identifier: the build check is a plain text grep.
+ */
+#ifdef CONFIG_KSU
+extern bool ksu_selinux_hide_running;
+#endif
+
 /* SECMARK reference count */
 static atomic_t selinux_secmark_refcount = ATOMIC_INIT(0);
 
