@@ -73,10 +73,25 @@ mkdir -p "$CCACHE_DIR"
 # ==========================================
 if [ "$ENABLE_KSU" -eq 1 ]; then
     echo "==========================================="
-    echo " [*] Initializing KernelSU (ReSukiSU) Setup"
+    echo " [*] Initializing KernelSU (SukiSU-Ultra main) Setup"
     echo "==========================================="
-    echo "[*] Downloading and running ReSukiSU remote setup script..."
-    curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
+    # 不用远端 setup.sh：它 clone 的是 Baka-SU/BakaSU，该仓库已重定向且同步滞后，
+    # 拉到的 commit（c95d6e2c, v4.2.1）没有 avc_spoof.c / uts_spoof.c / mount_hide.c，
+    # 而且 selinux_hide 也没能真正注册进内核。这里直接锁 SukiSU-Ultra 最新 main。
+    rm -rf KernelSU
+    git clone --depth 1 https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
+    (
+        cd KernelSU
+        KSU_COMMIT=$(git rev-parse --short HEAD)
+        KSU_TAG=$(git describe --abbrev=0 --tags 2>/dev/null || echo unknown)
+        KSU_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+        echo "[+] KernelSU commit=${KSU_COMMIT} tag=${KSU_TAG} count=${KSU_COUNT}"
+        echo "[+] features:"
+        ls kernel/feature/*.c 2>/dev/null | sed 's#kernel/feature/#    #'
+    )
+    ln -sfn "$(pwd)/KernelSU/kernel" "drivers/kernelsu"
+    grep -q "kernelsu" drivers/Makefile || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
+    grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig || sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
     echo "[+] KernelSU setup finished."
 fi
 
