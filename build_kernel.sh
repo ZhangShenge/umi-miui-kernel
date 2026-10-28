@@ -100,6 +100,17 @@ if [ "$ENABLE_KSU" -eq 1 ]; then
     fi
     grep -q "kernelsu" drivers/Makefile || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
     grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig || sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+
+    # ---- 4.19 兼容性补丁 ----
+    # 1) MODULE_IMPORT_NS 是 5.10+ 才有的宏，4.19 上会退化成函数调用 ->
+    #    "type specifier missing" / "parameter list without types"
+    if grep -q 'MODULE_IMPORT_NS(VFS_internal' KernelSU/kernel/core/init.c 2>/dev/null; then
+        sed -i 's/^MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);/\/\* [dsh] 4.19: no MODULE_IMPORT_NS \*\//' KernelSU/kernel/core/init.c
+        echo "[+] patched MODULE_IMPORT_NS for 4.19"
+    fi
+    echo "[+] remaining MODULE_IMPORT_NS lines:"
+    grep -n 'MODULE_IMPORT_NS' KernelSU/kernel/core/init.c 2>/dev/null | sed 's/^/    /' || echo "    (none)"
+
     echo "[+] KernelSU setup finished."
 fi
 
