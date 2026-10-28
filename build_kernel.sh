@@ -210,7 +210,15 @@ build_target() {
         scripts/config --file "${OUT_DIR}/.config" \
             -e KSU \
             -e THREAD_INFO_IN_TASK \
-            -e KSU_SUSFS
+            -e KSU_SUSFS \
+            -e KSU_TOOLKIT_SUPPORT \
+            -e KSU_MANUAL_HOOK \
+            -d KSU_DEBUG \
+            -d KSU_SUSFS_ENABLE_LOG \
+            -e SECURITY_SELINUX_BOOTPARAM \
+            --set-val SECURITY_SELINUX_BOOTPARAM_VALUE 1 \
+            -e SECURITY_SELINUX_DEFAULT_ENFORCING \
+            --set-str LOCALVERSION -perf
     fi
 
     # 3. MIUI configurations
